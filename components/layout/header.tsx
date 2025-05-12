@@ -19,11 +19,14 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Menu, Search, ShoppingCart, User, X } from "lucide-react"
 import { getFullPath } from "@/lib/constants"
+import { supabase } from '@/lib/supabase'
+import { useToast } from '@/components/ui/use-toast'
 
 export default function Header() {
   const router = useRouter()
   const { user, logout, isAdmin } = useAuth()
   const { items } = useCart()
+  const { toast } = useToast()
 
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
@@ -36,9 +39,24 @@ export default function Header() {
     }
   }
 
-  const handleLogout = () => {
-    logout()
-    router.push(getFullPath("/"))
+  const handleSignOut = async () => {
+    try {
+      const { error } = await supabase.auth.signOut()
+      if (error) throw error
+
+      toast({
+        title: 'Выход выполнен',
+        description: 'Вы успешно вышли из системы',
+      })
+      router.push('/login')
+      router.refresh()
+    } catch (error) {
+      toast({
+        title: 'Ошибка выхода',
+        description: 'Не удалось выйти из системы',
+        variant: 'destructive',
+      })
+    }
   }
 
   const cartItemCount = items.reduce((total, item) => total + item.quantity, 0)
@@ -167,7 +185,7 @@ export default function Header() {
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout}>Выйти</DropdownMenuItem>
+                <DropdownMenuItem onClick={handleSignOut}>Выйти</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (

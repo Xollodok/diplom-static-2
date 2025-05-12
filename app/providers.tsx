@@ -5,13 +5,12 @@ import type React from "react"
 import { createContext, useContext, useEffect, useState } from "react"
 import type { Product, User, CartItem } from "@/lib/types"
 import { initialProducts } from "@/lib/data"
+import { supabase } from '@/lib/supabase'
+import type { User as SupabaseUser } from '@supabase/supabase-js'
 
 type AuthContextType = {
-  user: User | null
-  login: (email: string, password: string) => boolean
-  logout: () => void
-  register: (name: string, email: string, password: string) => boolean
-  isAdmin: boolean
+  user: SupabaseUser | null
+  loading: boolean
 }
 
 type CartContextType = {
@@ -30,14 +29,17 @@ type ProductContextType = {
   deleteProduct: (productId: string) => void
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  loading: true,
+})
 const CartContext = createContext<CartContextType | undefined>(undefined)
 const ProductContext = createContext<ProductContextType | undefined>(undefined)
 
 export function Providers({ children }: { children: React.ReactNode }) {
   // Auth state
-  const [user, setUser] = useState<User | null>(null)
-  const [isAdmin, setIsAdmin] = useState(false)
+  const [user, setUser] = useState<SupabaseUser | null>(null)
+  const [loading, setLoading] = useState(true)
 
   // Cart state
   const [cartItems, setCartItems] = useState<CartItem[]>([])
@@ -48,14 +50,22 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   // Initialize data on client-side
   useEffect(() => {
-    // Load user from localStorage
-    const storedUser = localStorage.getItem("user")
-    if (storedUser) {
-      const parsedUser = JSON.parse(storedUser)
-      setUser(parsedUser)
-      setIsAdmin(parsedUser.email === "admin@paintpro.com")
-    }
+    // Check active sessions and sets the user
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+      setLoading(false)
+    })
 
+    // Listen for changes on auth state (logged in, signed out, etc.)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+      setLoading(false)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  useEffect(() => {
     // Load cart from localStorage
     const storedCart = localStorage.getItem("cart")
     if (storedCart) {
@@ -111,7 +121,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
     if (foundUser) {
       setUser(foundUser)
-      setIsAdmin(foundUser.email === "admin@paintpro.com")
       localStorage.setItem("user", JSON.stringify(foundUser))
       return true
     }
@@ -121,7 +130,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   const logout = () => {
     setUser(null)
-    setIsAdmin(false)
     localStorage.removeItem("user")
   }
 
@@ -225,7 +233,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, register, isAdmin }}>
+    <AuthContext.Provider value={{ user, loading }}>
       <CartContext.Provider
         value={{
           items: cartItems,
